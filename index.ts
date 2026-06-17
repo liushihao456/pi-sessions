@@ -46,6 +46,7 @@ type LiveSessionRecord = {
 	adapter?: InteractiveModeAdapter;
 	sessionManager?: any;
 	context?: CommandContext;
+	inheritance?: any;
 	started?: boolean;
 	runPromise?: Promise<void>;
 	expectedStop?: boolean;
@@ -141,6 +142,14 @@ function collectRuntimeInheritance(ctx?: CommandContext): any {
 		authStorage: ctx.modelRegistry?.authStorage,
 		sessionOptions,
 	};
+}
+
+function safeCollectRuntimeInheritance(ctx?: CommandContext): any {
+	try {
+		return collectRuntimeInheritance(ctx);
+	} catch {
+		return {};
+	}
 }
 
 function createInheritedSettingsManager(
@@ -434,8 +443,21 @@ const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 	sessionManager,
 	sessionStartEvent,
 }) => {
-	const inheritance =
-		runtimeInheritanceBySessionManager.get(sessionManager) ?? {};
+	const host = getHost();
+	const activeRecord =
+		host.activeId !== PARENT_SESSION_ID ? host.get(host.activeId) : null;
+	let inheritance = runtimeInheritanceBySessionManager.get(sessionManager);
+	// /new and /resume inside a child create a fresh SessionManager, so WeakMap
+	// inheritance from the original child manager is lost. Reattach it from the
+	// active child record before session construction, without mutating session log.
+	if (!inheritance && activeRecord?.kind === "child") {
+		inheritance =
+			activeRecord.inheritance ??
+			safeCollectRuntimeInheritance(activeRecord.context);
+		runtimeInheritanceBySessionManager.set(sessionManager, inheritance);
+		activeRecord.inheritance = inheritance;
+	}
+	inheritance ??= {};
 	const inheritedSettings = createInheritedSettingsManager(
 		cwd,
 		agentDir,
@@ -566,6 +588,25 @@ class PiSessionsHost {
 		this.notify();
 	}
 
+	private updateChildFromContext(
+		child: LiveSessionRecord,
+		ctx: CommandContext,
+	): LiveSessionRecord {
+		child.context = ctx;
+		child.cwd = ctx.cwd || child.cwd;
+		child.sessionManager = ctx.sessionManager || child.sessionManager;
+		child.sessionId = ctx.sessionManager?.getSessionId?.() || child.sessionId;
+		child.sessionFile =
+			ctx.sessionManager?.getSessionFile?.() || child.sessionFile;
+		child.transcript = resolveTranscriptName(
+			ctx.sessionManager?.getSessionName?.(),
+			child.sessionFile,
+		);
+		child.lastActivityAt = Date.now();
+		this.notify();
+		return child;
+	}
+
 	bindSessionContext(ctx: CommandContext): LiveSessionRecord {
 		const sessionId = ctx.sessionManager?.getSessionId?.();
 		const sessionFile = ctx.sessionManager?.getSessionFile?.();
@@ -575,22 +616,28 @@ class PiSessionsHost {
 				((sessionId && r.sessionId === sessionId) ||
 					(sessionFile && r.sessionFile === sessionFile)),
 		);
-		if (child) {
-			child.context = ctx;
-			child.cwd = ctx.cwd || child.cwd;
-			child.sessionManager = ctx.sessionManager || child.sessionManager;
-			child.sessionId = sessionId || child.sessionId;
-			child.sessionFile = sessionFile || child.sessionFile;
-			child.transcript = resolveTranscriptName(
-				ctx.sessionManager?.getSessionName?.(),
-				child.sessionFile,
-			);
-			child.lastActivityAt = Date.now();
-			this.notify();
-			return child;
+		if (child) return this.updateChildFromContext(child, ctx);
+
+		const parent = this.records.get(PARENT_SESSION_ID)!;
+		const isParentContext =
+			(sessionId && parent.sessionId === sessionId) ||
+			(sessionFile && parent.sessionFile === sessionFile);
+		if (isParentContext) {
+			this.registerParent(ctx);
+			return parent;
 		}
+
+		// /new or /resume inside the active child changes session id/file before we
+		// can match by identity. Route that replacement to the active child, but only
+		// after ruling out the parent context above.
+		const activeChild =
+			this.activeId !== PARENT_SESSION_ID ? this.get(this.activeId) : null;
+		if (activeChild?.kind === "child") {
+			return this.updateChildFromContext(activeChild, ctx);
+		}
+
 		this.registerParent(ctx);
-		return this.records.get(PARENT_SESSION_ID)!;
+		return parent;
 	}
 
 	updateActivity(ctx: CommandContext, activity: Activity): void {
@@ -614,7 +661,7 @@ class PiSessionsHost {
 			name: path.basename(cwd || process.cwd()) || "session",
 			cwd,
 			sessionManager,
-			inheritance: collectRuntimeInheritance(ctx),
+			inheritance: safeCollectRuntimeInheritance(ctx),
 		});
 	}
 
@@ -645,7 +692,7 @@ class PiSessionsHost {
 			name,
 			cwd,
 			sessionManager,
-			inheritance: collectRuntimeInheritance(ctx),
+			inheritance: safeCollectRuntimeInheritance(ctx),
 		});
 	}
 
@@ -675,6 +722,7 @@ class PiSessionsHost {
 				opts.sessionManager.getSessionName?.(),
 				opts.sessionManager.getSessionFile?.(),
 			),
+			inheritance: opts.inheritance,
 		};
 		this.records.set(id, record);
 		this.notify();
