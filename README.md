@@ -15,7 +15,7 @@ pi install npm:pi-parallel-sessions
 Or install directly from GitHub:
 
 ```bash
-pi install git:github.com/liushihao456/pi-sessions@v0.2.0
+pi install git:github.com/liushihao456/pi-sessions
 ```
 
 ## Command
