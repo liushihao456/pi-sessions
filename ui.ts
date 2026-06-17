@@ -656,8 +656,9 @@ class ResumeSessionPicker implements Component, Focusable {
 		);
 	}
 
-	private padRows(lines: string[], width: number, rendered: number): void {
-		for (let i = rendered; i < RESUME_MAX_VISIBLE; i++) {
+	private padRows(lines: string[], width: number, rendered: number, totalItems: number): void {
+		const target = Math.min(Math.max(totalItems, rendered), RESUME_MAX_VISIBLE);
+		for (let i = rendered; i < target; i++) {
 			lines.push(" ".repeat(Math.max(0, width)));
 		}
 	}
@@ -771,7 +772,7 @@ class ResumeSessionPicker implements Component, Focusable {
 				rendered++;
 			}
 		}
-		this.padRows(lines, width, rendered);
+		this.padRows(lines, width, rendered, visibleSessions.length);
 		lines.push(border());
 		lines.push(
 			padVisible(
@@ -1014,8 +1015,9 @@ class SessionsView {
 		);
 	}
 
-	private padRows(lines: string[], width: number, rendered: number): void {
-		for (let i = rendered; i < SESSIONS_MAX_VISIBLE; i++) {
+	private padRows(lines: string[], width: number, rendered: number, totalItems: number): void {
+		const target = Math.min(Math.max(totalItems, rendered), SESSIONS_MAX_VISIBLE);
+		for (let i = rendered; i < target; i++) {
 			lines.push(" ".repeat(Math.max(0, width)));
 		}
 	}
@@ -1102,7 +1104,7 @@ class SessionsView {
 				rendered++;
 			}
 		}
-		this.padRows(lines, width, rendered);
+		this.padRows(lines, width, rendered, visibleSessions.length);
 		lines.push(border());
 		lines.push(
 			padVisible(
