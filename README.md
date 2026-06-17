@@ -24,6 +24,10 @@ Only one slash command is exposed:
 
 - `/sessions` — open the session switcher.
 
+Shortcut:
+
+- `Ctrl-R` — open the same session switcher without typing `/sessions`.
+
 All session operations happen inside that switcher.
 
 ## Switcher keys
