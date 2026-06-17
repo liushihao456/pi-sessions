@@ -188,6 +188,8 @@ export class SessionWidget implements Component {
 // --- FileExplorer (from pi-project) ---
 
 const FILE_EXPLORER_MAX_VISIBLE = 8;
+const SESSIONS_MAX_VISIBLE = 12;
+const RESUME_MAX_VISIBLE = 12;
 
 function expandHome(input: string): string {
 	if (input === "~") return homedir();
@@ -645,6 +647,21 @@ class ResumeSessionPicker implements Component, Focusable {
 		);
 	}
 
+	private visibleStart(total: number): number {
+		if (total <= RESUME_MAX_VISIBLE) return 0;
+		const half = Math.floor(RESUME_MAX_VISIBLE / 2);
+		return Math.min(
+			Math.max(0, this.selected - half),
+			total - RESUME_MAX_VISIBLE,
+		);
+	}
+
+	private padRows(lines: string[], width: number, rendered: number): void {
+		for (let i = rendered; i < RESUME_MAX_VISIBLE; i++) {
+			lines.push(" ".repeat(Math.max(0, width)));
+		}
+	}
+
 	private clampSelection(): void {
 		const max = Math.max(0, this.filteredSessions().length - 1);
 		this.selected = Math.max(0, Math.min(this.selected, max));
@@ -701,8 +718,12 @@ class ResumeSessionPicker implements Component, Focusable {
 		lines.push(border());
 		lines.push(accent(fits(width, `${prefix}${renderedInput}`)));
 		lines.push(border("dim"));
+		const startIdx = this.visibleStart(visibleSessions.length);
+		const endIdx = Math.min(visibleSessions.length, startIdx + RESUME_MAX_VISIBLE);
+		let rendered = 0;
 		if (this.error) {
 			lines.push(padVisible(`  ${error("error")} ${this.error}`, width));
+			rendered = 1;
 		} else if (visibleSessions.length === 0) {
 			lines.push(
 				padVisible(
@@ -710,8 +731,9 @@ class ResumeSessionPicker implements Component, Focusable {
 					width,
 				),
 			);
+			rendered = 1;
 		} else {
-			for (let i = 0; i < visibleSessions.length; i++) {
+			for (let i = startIdx; i < endIdx; i++) {
 				const session = visibleSessions[i]!;
 				const marker = i === this.selected ? "›" : " ";
 				const title =
@@ -746,8 +768,10 @@ class ResumeSessionPicker implements Component, Focusable {
 					line = th.bg("selectedBg", line);
 				}
 				lines.push(line);
+				rendered++;
 			}
 		}
+		this.padRows(lines, width, rendered);
 		lines.push(border());
 		lines.push(
 			padVisible(
@@ -981,6 +1005,21 @@ class SessionsView {
 		this.requestRender();
 	}
 
+	private visibleStart(total: number): number {
+		if (total <= SESSIONS_MAX_VISIBLE) return 0;
+		const half = Math.floor(SESSIONS_MAX_VISIBLE / 2);
+		return Math.min(
+			Math.max(0, this.selected - half),
+			total - SESSIONS_MAX_VISIBLE,
+		);
+	}
+
+	private padRows(lines: string[], width: number, rendered: number): void {
+		for (let i = rendered; i < SESSIONS_MAX_VISIBLE; i++) {
+			lines.push(" ".repeat(Math.max(0, width)));
+		}
+	}
+
 	private activity(session: SessionInfo): string {
 		return session.agentStatus || "idle";
 	}
@@ -1012,8 +1051,12 @@ class SessionsView {
 		lines.push(accent(fits(width, `${prefix}${renderedInput}`)));
 		lines.push(border("dim"));
 
+		const startIdx = this.visibleStart(visibleSessions.length);
+		const endIdx = Math.min(visibleSessions.length, startIdx + SESSIONS_MAX_VISIBLE);
+		let rendered = 0;
 		if (this.error) {
 			lines.push(padVisible(`  ${error("error")} ${this.error}`, width));
+			rendered = 1;
 		} else if (visibleSessions.length === 0) {
 			lines.push(
 				padVisible(
@@ -1021,10 +1064,11 @@ class SessionsView {
 					width,
 				),
 			);
+			rendered = 1;
 		} else {
 			const nameW = this.nameWidth;
 			const stateW = 9;
-			for (let i = 0; i < visibleSessions.length; i++) {
+			for (let i = startIdx; i < endIdx; i++) {
 				const session = visibleSessions[i]!;
 				const selected = i === this.selected;
 				const isAttached =
@@ -1055,8 +1099,10 @@ class SessionsView {
 				lines.push(
 					padVisible(`${styledLeft}${styledState}${cwd}  ${transcript}`, width),
 				);
+				rendered++;
 			}
 		}
+		this.padRows(lines, width, rendered);
 		lines.push(border());
 		lines.push(
 			padVisible(
