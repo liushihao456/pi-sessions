@@ -845,6 +845,25 @@ class SessionsView {
 			this.error = null;
 			this.sessions = await this.actions.getSessions();
 			computeShortNames(this.sessions);
+			// Sort: working (non-current) first, then rest, current last
+			{
+				const attached = this.actions.getAttached();
+				const current: SessionInfo[] = [];
+				const working: SessionInfo[] = [];
+				const rest: SessionInfo[] = [];
+				for (const s of this.sessions) {
+					const isCurrent =
+						s.id === PARENT_SESSION_ID
+							? !attached || attached === PARENT_SESSION_ID
+							: attached === s.name || attached === s.id;
+					if (isCurrent) {
+						current.push(s);
+						continue;
+					}
+					((s.agentStatus || "idle") === "working" ? working : rest).push(s);
+				}
+				this.sessions = [...working, ...rest, ...current];
+			}
 			if (!this.initialSelectionSet) {
 				this.updateNameWidth();
 				this.selected = this.firstNonCurrentIndex();
