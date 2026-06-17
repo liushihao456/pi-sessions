@@ -2,13 +2,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
 	createAgentSessionFromServices,
 	createAgentSessionRuntime,
 	createAgentSessionServices,
 	getAgentDir,
+	getPackageDir,
+	hasTrustRequiringProjectResources,
 	InteractiveMode,
+	ProjectTrustStore,
 	SessionManager,
+	SettingsManager,
 	type CreateAgentSessionRuntimeFactory,
 } from "@earendil-works/pi-coding-agent";
 import { SessionWidget, showSessionsView } from "./ui.ts";
@@ -91,9 +96,123 @@ function sanitizeName(name: string): string {
 	);
 }
 
-function sessionNameForCwd(cwd: string): string {
-	const base = path.basename(cwd || process.cwd()) || "session";
-	return sanitizeName(`${base}-${Date.now().toString(36).slice(-5)}`);
+let modelResolverPromise: Promise<any> | null = null;
+const runtimeInheritanceBySessionManager = new WeakMap<object, any>();
+
+async function loadModelResolver(): Promise<any> {
+	modelResolverPromise ??= import(
+		pathToFileURL(path.join(getPackageDir(), "dist/core/model-resolver.js"))
+			.href
+	);
+	return await modelResolverPromise;
+}
+
+function sameModel(a: any, b: any): boolean {
+	return !!a && !!b && a.provider === b.provider && a.id === b.id;
+}
+
+function hasExistingMessages(sessionManager: any): boolean {
+	return (sessionManager.buildSessionContext?.().messages?.length ?? 0) > 0;
+}
+
+function inferThinkingLevel(ctx: CommandContext): string | undefined {
+	const branch = ctx.sessionManager?.getBranch?.() ?? [];
+	for (let i = branch.length - 1; i >= 0; i--) {
+		const entry = branch[i];
+		if (entry?.type === "thinking_level_change" && entry.thinkingLevel) {
+			return entry.thinkingLevel;
+		}
+	}
+	return undefined;
+}
+
+function collectRuntimeInheritance(ctx?: CommandContext): any {
+	if (!ctx) return {};
+	const promptOptions = ctx.getSystemPromptOptions?.() ?? {};
+	const sessionOptions: any = {};
+	if (Array.isArray(promptOptions.selectedTools)) {
+		sessionOptions.tools = [...promptOptions.selectedTools];
+	}
+	if (ctx.model) sessionOptions.model = ctx.model;
+	const thinkingLevel = inferThinkingLevel(ctx);
+	if (thinkingLevel) sessionOptions.thinkingLevel = thinkingLevel;
+	return {
+		ctx,
+		authStorage: ctx.modelRegistry?.authStorage,
+		sessionOptions,
+	};
+}
+
+function createInheritedSettingsManager(
+	cwd: string,
+	agentDir: string,
+	inheritance: any,
+): { settingsManager: any; diagnostics: any[] } {
+	const diagnostics: any[] = [];
+	const sameCwd =
+		inheritance?.ctx?.cwd &&
+		path.resolve(inheritance.ctx.cwd) === path.resolve(cwd);
+	let projectTrusted = true;
+	if (sameCwd) {
+		projectTrusted = inheritance.ctx.isProjectTrusted?.() ?? true;
+	} else if (hasTrustRequiringProjectResources(cwd)) {
+		const trustStore = new ProjectTrustStore(agentDir);
+		projectTrusted = trustStore.get(cwd) === true;
+		if (!projectTrusted) {
+			diagnostics.push({
+				type: "warning",
+				message: `Project resources in child cwd are not trusted: ${cwd}`,
+			});
+		}
+	}
+	return {
+		settingsManager: SettingsManager.create(cwd, agentDir, { projectTrusted }),
+		diagnostics,
+	};
+}
+
+async function resolveChildSessionOptions(
+	services: any,
+	sessionManager: any,
+	inheritance: any,
+): Promise<any> {
+	const options: any = { ...(inheritance?.sessionOptions ?? {}) };
+	const existing = hasExistingMessages(sessionManager);
+	if (existing) {
+		delete options.model;
+		delete options.thinkingLevel;
+	}
+
+	const patterns = services.settingsManager?.getEnabledModels?.();
+	if (!patterns?.length) return options;
+
+	const { resolveModelScope } = await loadModelResolver();
+	const scopedModels = await resolveModelScope(
+		patterns,
+		services.modelRegistry,
+	);
+	if (!scopedModels.length) return options;
+
+	options.scopedModels = scopedModels;
+	if (!existing) {
+		const inheritedModel = inheritance?.sessionOptions?.model;
+		const savedProvider = services.settingsManager?.getDefaultProvider?.();
+		const savedModelId = services.settingsManager?.getDefaultModel?.();
+		const savedModel =
+			savedProvider && savedModelId
+				? services.modelRegistry.find(savedProvider, savedModelId)
+				: undefined;
+		const selected =
+			scopedModels.find((scoped: any) =>
+				sameModel(scoped.model, inheritedModel),
+			) ??
+			scopedModels.find((scoped: any) => sameModel(scoped.model, savedModel)) ??
+			scopedModels[0];
+		options.model = selected.model;
+		if (selected.thinkingLevel) options.thinkingLevel = selected.thinkingLevel;
+	}
+
+	return options;
 }
 
 function asString(value: unknown): string | null {
@@ -315,11 +434,38 @@ const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 	sessionManager,
 	sessionStartEvent,
 }) => {
-	const services = await createAgentSessionServices({ cwd, agentDir });
+	const inheritance =
+		runtimeInheritanceBySessionManager.get(sessionManager) ?? {};
+	const inheritedSettings = createInheritedSettingsManager(
+		cwd,
+		agentDir,
+		inheritance,
+	);
+	const services = await createAgentSessionServices({
+		cwd,
+		agentDir,
+		authStorage: inheritance.authStorage,
+		settingsManager: inheritedSettings.settingsManager,
+	});
+	services.diagnostics.push(...inheritedSettings.diagnostics);
+	let sessionOptions: any = {};
+	try {
+		sessionOptions = await resolveChildSessionOptions(
+			services,
+			sessionManager,
+			inheritance,
+		);
+	} catch (error) {
+		services.diagnostics.push({
+			type: "warning",
+			message: `Failed to resolve inherited child session options: ${String(error)}`,
+		});
+	}
 	const result = await createAgentSessionFromServices({
 		services,
 		sessionManager,
 		sessionStartEvent,
+		...sessionOptions,
 	});
 	return {
 		...result,
@@ -468,12 +614,14 @@ class PiSessionsHost {
 			name: path.basename(cwd || process.cwd()) || "session",
 			cwd,
 			sessionManager,
+			inheritance: collectRuntimeInheritance(ctx),
 		});
 	}
 
 	async openSavedSessionAsLive(
 		sessionPath: string,
 		cwdOverride?: string,
+		ctx?: CommandContext,
 	): Promise<LiveSessionRecord> {
 		const existing = [...this.records.values()].find(
 			(r) =>
@@ -497,6 +645,7 @@ class PiSessionsHost {
 			name,
 			cwd,
 			sessionManager,
+			inheritance: collectRuntimeInheritance(ctx),
 		});
 	}
 
@@ -505,6 +654,7 @@ class PiSessionsHost {
 		cwd: string;
 		sessionManager: any;
 		parent?: LiveSessionRecord;
+		inheritance?: any;
 	}): Promise<LiveSessionRecord> {
 		const id = `${sanitizeName(opts.name)}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 		const record: LiveSessionRecord = {
@@ -528,6 +678,12 @@ class PiSessionsHost {
 		};
 		this.records.set(id, record);
 		this.notify();
+		if (opts.inheritance) {
+			runtimeInheritanceBySessionManager.set(
+				opts.sessionManager,
+				opts.inheritance,
+			);
+		}
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: opts.cwd,
 			agentDir: getAgentDir(),
@@ -727,7 +883,11 @@ async function openSessions(
 				sessionPath = sessions[0]?.path;
 			}
 			if (!sessionPath) throw new Error("No saved sessions found");
-			const child = await host.openSavedSessionAsLive(sessionPath);
+			const child = await host.openSavedSessionAsLive(
+				sessionPath,
+				undefined,
+				ctx,
+			);
 			targetToActivate = child.id;
 		},
 		killSession: async (name: string) => {

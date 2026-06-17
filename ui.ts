@@ -655,7 +655,12 @@ class ResumeSessionPicker implements Component, Focusable {
 		);
 	}
 
-	private padRows(lines: string[], width: number, rendered: number, totalItems: number): void {
+	private padRows(
+		lines: string[],
+		width: number,
+		rendered: number,
+		totalItems: number,
+	): void {
 		const target = Math.min(Math.max(totalItems, rendered), RESUME_MAX_VISIBLE);
 		for (let i = rendered; i < target; i++) {
 			lines.push(" ".repeat(Math.max(0, width)));
@@ -719,7 +724,10 @@ class ResumeSessionPicker implements Component, Focusable {
 		lines.push(accent(fits(width, `${prefix}${renderedInput}`)));
 		lines.push(border("dim"));
 		const startIdx = this.visibleStart(visibleSessions.length);
-		const endIdx = Math.min(visibleSessions.length, startIdx + RESUME_MAX_VISIBLE);
+		const endIdx = Math.min(
+			visibleSessions.length,
+			startIdx + RESUME_MAX_VISIBLE,
+		);
 		let rendered = 0;
 		if (this.error) {
 			lines.push(padVisible(`  ${error("error")} ${this.error}`, width));
@@ -1014,8 +1022,16 @@ class SessionsView {
 		);
 	}
 
-	private padRows(lines: string[], width: number, rendered: number, totalItems: number): void {
-		const target = Math.min(Math.max(totalItems, rendered), SESSIONS_MAX_VISIBLE);
+	private padRows(
+		lines: string[],
+		width: number,
+		rendered: number,
+		totalItems: number,
+	): void {
+		const target = Math.min(
+			Math.max(totalItems, rendered),
+			SESSIONS_MAX_VISIBLE,
+		);
 		for (let i = rendered; i < target; i++) {
 			lines.push(" ".repeat(Math.max(0, width)));
 		}
@@ -1053,7 +1069,10 @@ class SessionsView {
 		lines.push(border("dim"));
 
 		const startIdx = this.visibleStart(visibleSessions.length);
-		const endIdx = Math.min(visibleSessions.length, startIdx + SESSIONS_MAX_VISIBLE);
+		const endIdx = Math.min(
+			visibleSessions.length,
+			startIdx + SESSIONS_MAX_VISIBLE,
+		);
 		let rendered = 0;
 		if (this.error) {
 			lines.push(padVisible(`  ${error("error")} ${this.error}`, width));
