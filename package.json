@@ -1,0 +1,40 @@
+{
+  "name": "pi-parallel-sessions",
+  "version": "0.2.0",
+  "description": "Run multiple live sessions in parallel in pi agent",
+  "type": "module",
+  "license": "MIT",
+  "author": "liushihao456",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liushihao456/pi-sessions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liushihao456/pi-sessions/issues"
+  },
+  "homepage": "https://github.com/liushihao456/pi-sessions#readme",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-agent",
+    "sessions",
+    "parallel-sessions"
+  ],
+  "files": [
+    "index.ts",
+    "ui.ts",
+    "README.md",
+    "screenshot.png",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "image": "https://raw.githubusercontent.com/liushihao456/pi-sessions/main/screenshot.png"
+  }
+}
