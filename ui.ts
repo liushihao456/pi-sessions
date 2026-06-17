@@ -772,7 +772,7 @@ class ResumeSessionPicker implements Component, Focusable {
 				rendered++;
 			}
 		}
-		this.padRows(lines, width, rendered, visibleSessions.length);
+		this.padRows(lines, width, rendered, this.sessions.length);
 		lines.push(border());
 		lines.push(
 			padVisible(
@@ -1104,7 +1104,7 @@ class SessionsView {
 				rendered++;
 			}
 		}
-		this.padRows(lines, width, rendered, visibleSessions.length);
+		this.padRows(lines, width, rendered, this.sessions.length);
 		lines.push(border());
 		lines.push(
 			padVisible(
