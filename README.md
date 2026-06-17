@@ -6,6 +6,18 @@ Multiple Pi sessions can stay alive concurrently. Exactly one session owns the t
 
 ![pi-sessions switcher UI](screenshot.png)
 
+## Install
+
+```bash
+pi install npm:pi-parallel-sessions
+```
+
+Or install directly from GitHub:
+
+```bash
+pi install git:github.com/liushihao456/pi-sessions@v0.2.0
+```
+
 ## Command
 
 Only one slash command is exposed:
