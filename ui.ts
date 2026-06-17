@@ -632,9 +632,8 @@ class ResumeSessionPicker implements Component, Focusable {
 	}
 
 	private filteredSessions(): SavedSessionInfo[] {
-		const query = this.filterInput.getValue().trim().toLowerCase();
-		if (!query) return this.sessions;
-		return this.sessions.filter((session) =>
+		const query = this.filterInput.getValue().trim();
+		return fuzzyFilter(this.sessions, query, (session) =>
 			[
 				session.name,
 				session.cwd,
@@ -643,7 +642,7 @@ class ResumeSessionPicker implements Component, Focusable {
 				session.id,
 			]
 				.filter(Boolean)
-				.some((value) => String(value).toLowerCase().includes(query)),
+				.join(" "),
 		);
 	}
 
