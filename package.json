@@ -1,6 +1,6 @@
 {
   "name": "pi-parallel-sessions",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "description": "Run multiple live sessions in parallel in pi agent",
   "type": "module",
   "license": "MIT",

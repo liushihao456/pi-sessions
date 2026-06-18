@@ -23,7 +23,7 @@ const HOST_KEY = "__PI_SESSIONS_HOST__";
 
 type ExtensionAPI = any;
 type CommandContext = any;
-type Activity = "idle" | "working" | "compacting" | "retrying" | "waiting";
+type Activity = "idle" | "working" | "waiting";
 type LiveState = "active" | "suspended" | "starting" | "stopped" | "error";
 
 type LiveSessionRecord = {
@@ -907,11 +907,9 @@ async function openSessions(
 		getResumeSessions,
 		getAttached: () => host.activeId,
 		getCwd: () => ctx.cwd || process.cwd(),
-		switchTo: async (nameOrId: string) => {
-			const target = host.get(
-				nameOrId === "parent" ? PARENT_SESSION_ID : nameOrId,
-			);
-			if (!target) throw new Error(`session not found: ${nameOrId}`);
+		switchTo: async (id: string) => {
+			const target = host.get(id === "parent" ? PARENT_SESSION_ID : id);
+			if (!target) throw new Error(`session not found: ${id}`);
 			targetToActivate = target.id;
 		},
 		newSession: async () => {
@@ -938,8 +936,8 @@ async function openSessions(
 			);
 			targetToActivate = child.id;
 		},
-		killSession: async (name: string) => {
-			targetToKill = name;
+		killSession: async (id: string) => {
+			targetToKill = id;
 		},
 		notify: (message: string, type?: "info" | "warning" | "error") =>
 			ctx.ui.notify(message, type || "info"),

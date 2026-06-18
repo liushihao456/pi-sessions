@@ -43,11 +43,11 @@ type SessionsActions = {
 	getResumeSessions?: () => Promise<SavedSessionInfo[]>;
 	getAttached: () => string | null;
 	getCwd: () => string;
-	switchTo: (name: string) => Promise<void>;
+	switchTo: (id: string) => Promise<void>;
 	newSession: () => Promise<void>;
 	newSessionInFolder: (cwd: string) => Promise<void>;
 	resumeSession: (sessionPath?: string) => Promise<void>;
-	killSession: (name: string) => Promise<void>;
+	killSession: (id: string) => Promise<void>;
 	notify: (message: string, type?: "info" | "warning" | "error") => void;
 };
 
@@ -1007,11 +1007,7 @@ class SessionsView {
 		if (matchesKey(data, "return") || matchesKey(data, "enter")) {
 			const session = this.selectedSession();
 			if (!session) return;
-			void this.actions
-				.switchTo(
-					session.id === PARENT_SESSION_ID ? PARENT_SESSION_ID : session.name,
-				)
-				.then(() => this.close());
+			void this.actions.switchTo(session.id).then(() => this.close());
 			return;
 		}
 		if (isCtrl(data, "k")) {
@@ -1021,7 +1017,7 @@ class SessionsView {
 				this.actions.notify("Cannot kill parent session.", "warning");
 				return;
 			}
-			void this.actions.killSession(session.name).then(() => this.close());
+			void this.actions.killSession(session.id).then(() => this.close());
 			return;
 		}
 
