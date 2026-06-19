@@ -1006,10 +1006,15 @@ export default function (pi: ExtensionAPI) {
 		const record = host.bindSessionContext(ctx);
 		const reason = needsPermission(event.toolName, event.input, record.name);
 		if (reason) {
-			if (record.id !== host.activeId) record.activity = "waiting";
+			if (record.id !== host.activeId) host.updateActivity(ctx, "waiting");
 			const ok = await ctx.ui.confirm("pi-sessions permission", reason, {
 				timeout: 60000,
 			} as any);
+			if (ok && record.id !== host.activeId) {
+				record.activity = "working";
+				record.lastActivityAt = Date.now();
+				host.notify();
+			}
 			if (!ok)
 				return {
 					block: true,
@@ -1032,8 +1037,14 @@ export default function (pi: ExtensionAPI) {
 		return undefined;
 	});
 
-	pi.on("tool_result", async (event: any) => {
+	pi.on("tool_result", async (event: any, ctx: CommandContext) => {
 		host.locks.releaseByToolCall(event.toolCallId);
+		const record = host.bindSessionContext(ctx);
+		if (record.activity === "waiting") {
+			record.activity = "working";
+			record.lastActivityAt = Date.now();
+			host.notify();
+		}
 		return undefined;
 	});
 

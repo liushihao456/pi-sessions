@@ -172,6 +172,10 @@ export class SessionWidget implements Component {
 		return interval && interval > 0 ? interval : DEFAULT_SPINNER_INTERVAL_MS;
 	}
 
+	private isWaiting(session: SessionInfo): boolean {
+		return (session.agentStatus || "idle") === "waiting";
+	}
+
 	private segment(session: SessionInfo, attached: string | null): string {
 		const current = session.id === attached || session.name === attached;
 		const name = this.theme.fg(
@@ -181,6 +185,9 @@ export class SessionWidget implements Component {
 		if (this.isWorking(session)) {
 			const spinner = this.spinnerFrame();
 			return spinner ? `${spinner} ${name}` : name;
+		}
+		if (this.isWaiting(session)) {
+			return `${this.theme.fg("warning", "?")} ${name}`;
 		}
 		return `${this.theme.fg("success", "✓")} ${name}`;
 	}
