@@ -20,11 +20,15 @@ import { SessionWidget, showSessionsView } from "./ui.ts";
 
 const PARENT_SESSION_ID = "__parent__";
 const HOST_KEY = "__PI_SESSIONS_HOST__";
+const INTERACTIVE_MODE_SPINNER_PATCHED = Symbol.for(
+	"pi-sessions.interactiveMode.spinnerPatched",
+);
 
 type ExtensionAPI = any;
 type CommandContext = any;
 type Activity = "idle" | "working" | "waiting";
 type LiveState = "active" | "suspended" | "starting" | "stopped" | "error";
+type WorkingIndicatorOptions = { frames?: string[]; intervalMs?: number };
 
 type LiveSessionRecord = {
 	id: string;
@@ -506,6 +510,7 @@ class PiSessionsHost {
 	parentHandoffActive = false;
 	activationInProgress: Promise<void> | null = null;
 	queuedActivation: string | null = null;
+	workingIndicator: WorkingIndicatorOptions | undefined = undefined;
 
 	constructor() {
 		this.records.set(PARENT_SESSION_ID, {
@@ -868,6 +873,24 @@ function getHost(): PiSessionsHost {
 	return g[HOST_KEY];
 }
 
+function patchInteractiveModeWorkingIndicator(host: PiSessionsHost): void {
+	const proto = (InteractiveMode as any)?.prototype;
+	if (
+		!proto ||
+		proto[INTERACTIVE_MODE_SPINNER_PATCHED] ||
+		typeof proto.setWorkingIndicator !== "function"
+	) {
+		return;
+	}
+	const original = proto.setWorkingIndicator;
+	proto.setWorkingIndicator = function (options?: WorkingIndicatorOptions) {
+		host.workingIndicator = options;
+		host.notify();
+		return original.call(this, options);
+	};
+	proto[INTERACTIVE_MODE_SPINNER_PATCHED] = true;
+}
+
 function installWidget(ctx: CommandContext, host: PiSessionsHost): void {
 	ctx.ui.setWidget("pi-sessions", (tui: any, theme: any) => {
 		const requestRender = () => tui.requestRender();
@@ -876,6 +899,7 @@ function installWidget(ctx: CommandContext, host: PiSessionsHost): void {
 			theme,
 			() => host.snapshot(),
 			requestRender,
+			() => host.workingIndicator,
 		);
 		return {
 			render: (width: number) => widget.render(width),
@@ -952,6 +976,7 @@ async function openSessions(
 
 export default function (pi: ExtensionAPI) {
 	const host = getHost();
+	patchInteractiveModeWorkingIndicator(host);
 
 	pi.registerCommand("sessions", {
 		description: "Open the pi-sessions switcher",

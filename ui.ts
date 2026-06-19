@@ -58,6 +58,13 @@ type WidgetSnapshot = {
 };
 
 const PARENT_SESSION_ID = "__parent__";
+const DEFAULT_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const DEFAULT_SPINNER_INTERVAL_MS = 80;
+
+type WorkingIndicatorOptions = {
+	frames?: string[];
+	intervalMs?: number;
+};
 
 function isCtrl(data: string, key: "o" | "r" | "k" | "p" | "n"): boolean {
 	const codes: Record<string, string> = {
@@ -99,11 +106,13 @@ function computeShortNames(sessions: SessionInfo[]): void {
 export class SessionWidget implements Component {
 	private frame = 0;
 	private timer: NodeJS.Timeout | null = null;
+	private timerIntervalMs = DEFAULT_SPINNER_INTERVAL_MS;
 
 	constructor(
 		private readonly theme: Theme,
 		private readonly getSnapshot: () => WidgetSnapshot | null,
 		private readonly requestRender: () => void,
+		private readonly getWorkingIndicator?: () => WorkingIndicatorOptions | undefined,
 	) {}
 
 	render(width: number): string[] {
@@ -147,6 +156,22 @@ export class SessionWidget implements Component {
 		return (session.agentStatus || "idle") === "working";
 	}
 
+	private spinnerFrame(): string {
+		const indicator = this.getWorkingIndicator?.();
+		const frames =
+			indicator?.frames !== undefined
+				? [...indicator.frames]
+				: DEFAULT_SPINNER_FRAMES;
+		if (!frames.length) return "";
+		const frame = frames[this.frame % frames.length] ?? "";
+		return indicator !== undefined ? frame : this.theme.fg("accent", frame);
+	}
+
+	private spinnerIntervalMs(): number {
+		const interval = this.getWorkingIndicator?.()?.intervalMs;
+		return interval && interval > 0 ? interval : DEFAULT_SPINNER_INTERVAL_MS;
+	}
+
 	private segment(session: SessionInfo, attached: string | null): string {
 		const current = session.id === attached || session.name === attached;
 		const name = this.theme.fg(
@@ -154,8 +179,8 @@ export class SessionWidget implements Component {
 			truncateToWidth(session.shortName || session.name, 18, "…"),
 		);
 		if (this.isWorking(session)) {
-			const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-			return `${this.theme.fg("accent", frames[this.frame % frames.length])} ${name}`;
+			const spinner = this.spinnerFrame();
+			return spinner ? `${spinner} ${name}` : name;
 		}
 		return `${this.theme.fg("success", "✓")} ${name}`;
 	}
@@ -171,11 +196,17 @@ export class SessionWidget implements Component {
 	}
 
 	private updateTimer(shouldRun: boolean): void {
+		const interval = this.spinnerIntervalMs();
+		if (shouldRun && this.timer && this.timerIntervalMs !== interval) {
+			clearInterval(this.timer);
+			this.timer = null;
+		}
 		if (shouldRun && !this.timer) {
+			this.timerIntervalMs = interval;
 			this.timer = setInterval(() => {
 				this.frame++;
 				this.requestRender();
-			}, 80);
+			}, interval);
 			return;
 		}
 		if (!shouldRun && this.timer) {
