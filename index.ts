@@ -884,8 +884,17 @@ function patchInteractiveModeWorkingIndicator(host: PiSessionsHost): void {
 	}
 	const original = proto.setWorkingIndicator;
 	proto.setWorkingIndicator = function (options?: WorkingIndicatorOptions) {
-		host.workingIndicator = options;
-		host.notify();
+		const source = [...host.records.values()].find((record) => record.mode === this);
+		const teardownReset =
+			options === undefined &&
+			source !== undefined &&
+			(source.expectedStop === true ||
+				source.state === "stopped" ||
+				source.state === "error");
+		if (!teardownReset) {
+			host.workingIndicator = options;
+			host.notify();
+		}
 		return original.call(this, options);
 	};
 	proto[INTERACTIVE_MODE_SPINNER_PATCHED] = true;
